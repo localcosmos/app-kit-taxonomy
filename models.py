@@ -85,6 +85,14 @@ class TaxonTree(models.Model):
 
     objects = TaxonTreeManager()
 
+
+    def save(self, *args, **kwargs):
+        if self.is_root_taxon == False and not self.parent:
+            raise ValueError('non-root taxa require a parent')
+
+        super().save(*args, **kwargs)
+        
+
     def __str__(self):
         return self.taxon_latname
 
