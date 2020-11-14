@@ -34,17 +34,34 @@ class TaxonSearch(object):
 
         self.kwargs = kwargs
 
+
+    def make_custom_queries(self):
+
+        self.exact_matches_query = self.models.TaxonTreeModel.objects.filter(
+            taxon_latname__iexact=self.searchtext.upper())
+
+        self.matches_query = self.models.TaxonTreeModel.objects.filter(
+            taxon_latname__istartswith=self.searchtext.upper())
+
+        self.vernacular_query = self.models.TaxonLocaleModel.objects.filter(
+            language=self.language, name__icontains=self.searchtext.upper())
+
     # do not apply limits here, because queries cannot be filtered after slicing
     def make_queries(self):
 
-        self.exact_matches_query = self.models.TaxonNamesModel.objects.filter(
-            language__in=['la', self.language], name__iexact=self.searchtext.upper())
+        if self.taxon_source == 'taxonomy.sources.custom':
+            self.make_custom_queries()
 
-        self.matches_query = self.models.TaxonNamesModel.objects.filter(
-            language__in=['la', self.language], name__istartswith=self.searchtext.upper())
+        else:
 
-        self.vernacular_query = self.models.TaxonNamesModel.objects.filter(
-            language=self.language, name__icontains=self.searchtext.upper())
+            self.exact_matches_query = self.models.TaxonNamesModel.objects.filter(
+                language__in=['la', self.language], name__iexact=self.searchtext.upper())
+
+            self.matches_query = self.models.TaxonNamesModel.objects.filter(
+                language__in=['la', self.language], name__istartswith=self.searchtext.upper())
+
+            self.vernacular_query = self.models.TaxonNamesModel.objects.filter(
+                language=self.language, name__icontains=self.searchtext.upper())
 
         self.queries_ready = True
         
@@ -71,14 +88,20 @@ class TaxonSearch(object):
             
             lazy_taxon = LazyTaxon(**taxon_kwargs)
 
-            if name.name_type == 'accepted name':
-                label = '{0}'.format(name.name)
-            
-            elif name.name_type == 'synonym':
-                label = '{0} (syn. {1})'.format(name.taxon_latname, name.name)
+            if self.taxon_source == 'taxonomy.sources.custom':
 
-            elif name.name_type == 'vernacular':
-                label = '{0} ({1})'.format(name.name, name.taxon_latname)
+                label = name.taxon_latname
+
+            else:
+
+                if name.name_type == 'accepted name':
+                    label = '{0}'.format(name.name)
+                
+                elif name.name_type == 'synonym':
+                    label = '{0} (syn. {1})'.format(name.taxon_latname, name.name)
+
+                elif name.name_type == 'vernacular':
+                    label = '{0} ({1})'.format(name.name, name.taxon_latname)
 
             obj = lazy_taxon.as_typeahead_choice(label=label)
             

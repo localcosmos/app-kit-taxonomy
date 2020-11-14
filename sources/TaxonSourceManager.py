@@ -24,13 +24,16 @@ from django.db import transaction
 # Python 3
 from html.parser import HTMLParser
 
+import logging
+
 
 '''
     base
 '''
 
 nuid36 = ['0','1','2','3','4','5','6','7','8','9',                                                                    
-          'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z']
+          'a','b','c','d','e','f','g','h','i','j','k','l','m',
+          'n','o','p','q','r','s','t','u','v','w','x','y','z']
 
 
 def d2n(integer):
@@ -509,7 +512,13 @@ class TreeCache:
     def _make_cache_entry(self, parent_taxon, children):
         # sort children by latname
         children.sort(key=lambda taxon: taxon.latname)
-        return {'parent_taxon' : parent_taxon, 'children' : children}
+        
+        cache_entry = {
+            'parent_taxon' : parent_taxon,
+            'children' : children
+        }
+
+        return cache_entry
 
     '''
     find_level only uses children, not parent_taxon
@@ -525,6 +534,8 @@ class TreeCache:
                 for child in level['children']:
                     if child.source_id == source_taxon.source_id:
                         return level_index
+
+        return None
 
 
 
@@ -549,6 +560,7 @@ class TaxonSourceManager:
     # the classes are only used by manager specific methods
     # the manager independent methods use only instances of these classes
     SourceTreeTaxonClass = None
+    SourceSynonymTaxonClass = None
 
     # classes and instances only used by methods of the independant manager
     TaxonTreeModel = None
@@ -557,6 +569,8 @@ class TaxonSourceManager:
 
     # caching
     TreeCacheClass = None
+
+    source_name = None
 
     # the subclass needs to implement the taxon models
     def __init__(self):
@@ -571,6 +585,26 @@ class TaxonSourceManager:
 
         self.first_run = False
 
+        self.logger = self._get_logger()
+
+
+    def _get_logger(self):
+        logger = logging.getLogger(self.source_name)
+
+        
+        logging_folder = '/var/log/lc-taxonomy/'
+
+        if not os.path.isdir(logging_folder):
+            os.makedirs(logging_folder)
+
+        logfile_path = os.path.join(logging_folder, 'TaxonSourceManager')
+        hdlr = logging.FileHandler(logfile_path)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        hdlr.setFormatter(formatter)
+        logger.addHandler(hdlr)
+        logger.setLevel(logging.INFO)
+
+        return logger
 
     def _get_root_source_taxa(self):
         raise NotImplementedError('Tree Managers need a _get_root_source_taxa method')
@@ -584,30 +618,6 @@ class TaxonSourceManager:
 
         return root_taxa
     
-    '''
-    get all children of a tree entry
-    '''
-    def _get_children(self, source_taxon):
-        raise NotImplementedError('Tree Managers need a _get_children method')
-
-    '''
-    this function has to travel right and up until the next parent taxon which has not been climbed down
-    yet has been found
-    returns a source_taxon or None
-
-    EXAMPLE:
-    - source_taxon is a taxon without children
-    - the next sibling of source taxon might have children -> check all siblings first
-    - if no siblings have children, travel up
-    '''
-
-    def _get_next_sibling(self, source_taxon):
-        raise NotImplementedError('Tree Managers need a _get_next_sibling method')
-
-    # travel one up
-    def _get_parent(self, source_taxon):
-        raise NotImplementedError('Tree Managers need a _get_parent method')
-        
     '''
     save the taxon and all its vernacular names into the LocalCosmos specific *Taxon* Tables
     should be the same for all sources
@@ -739,6 +749,10 @@ class TaxonSourceManager:
             # the last_child as a SourceTreeTaxon instance either has a nuid set - or can fetch the nuid from the target db
             last_child = self._climb_down(start_taxon)
 
+            message = 'last_child: {0}, nuid: {1}'.format(last_child.latname, last_child.get_nuid())
+            print(message)
+            self.logger.info(message)
+
             # search siblings of this childless taxon, or parent siblings if no siblings available
             # start_taxon is always the last child, which is the first child of the last group of children
             # climbing up always uses the new tree - but the taxa it walks already have been saved and have nuids
@@ -753,7 +767,9 @@ class TaxonSourceManager:
 
             if next_parent:
                 start_taxon = next_parent
-                # print('starting nuid (next_parent): %s' % start_taxon.get_nuid())
+                message = 'starting nuid (next_parent): {0}'.format(start_taxon.get_nuid())
+                print(message)
+                self.logger.info(message)
                 
             else:
                 continue_climbing = False
@@ -874,9 +890,9 @@ class TaxonSourceManager:
         existing_children_map = {}
         
         for taxon in existing_children_query:
-            existing_children.append({'author': taxon.author, 'latname': taxon.taxon_latname})
+            existing_children.append({'author': taxon.taxon_author, 'latname': taxon.taxon_latname})
 
-            author = taxon.author
+            author = taxon.taxon_author
             if not author:
                 author = 'None'
             key = " ".join([taxon.taxon_latname, author])
@@ -891,7 +907,7 @@ class TaxonSourceManager:
                 # the taxon already exists in the tree
                 # check synonyms for existing taxa
                 existing_taxon = existing_children_query.filter(taxon_latname=child.latname,
-                                                                author=child.author)
+                                                                taxon_author=child.author)
                 if len(existing_taxon) > 1:
                     raise ValueError('Found more than one child with the same latname/author combination in the children group: %s' % child.latname)
 
@@ -1023,6 +1039,8 @@ class TaxonSourceManager:
         
     def _climb_down(self, parent_taxon):
 
+        self.logger.info('climb down: {0}'.format(parent_taxon.latname))
+
         # if no nuid is found, it might be a duplicate
         is_duplicate = self._check_taxon_duplicate(parent_taxon)
         if is_duplicate:
@@ -1048,7 +1066,12 @@ class TaxonSourceManager:
                 parent_taxon = children[0]
                 first_child = children[0]
 
+                self.logger.info('first child: {0}'.format(first_child.latname))
+
             else:
+
+                self.logger.info('no more children found for: {0}'.format(parent_taxon.latname))
+                
                 if self.first_run == False:
                     # check if there are children in the database thet need to be deleted
                     # print("parent: %s %s" % (parent_taxon.latname, parent_taxon.get_nuid()))
@@ -1063,6 +1086,8 @@ class TaxonSourceManager:
         # if a parent_taxon that has no children is passed, return the parent taxon
         # the tree climber will then go to the next sibling - as it would with the first_child
         if first_child is None:
+            self.logger.info('climb down returning: {0}'.format(parent_taxon.latname))
             return parent_taxon
-        
+
+        self.logger.info('climb down: {0}'.format(first_child.latname))
         return first_child

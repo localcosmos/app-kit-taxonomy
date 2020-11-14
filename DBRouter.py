@@ -1,5 +1,5 @@
 # do not add custom to installed sources - custom taxonomy is writeable and not managed by this router
-INSTALLED_SOURCES = ['col']
+INSTALLED_SOURCES = ['col', 'algaebase']
 
 '''
     in general, django has read and write access to the database during development
@@ -33,7 +33,7 @@ class TaxonomyRouter:
         """
         if app_label in INSTALLED_SOURCES:
             if db == 'taxonomy_db':
-                return False
+                return True
 
             return False
         

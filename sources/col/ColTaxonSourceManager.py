@@ -296,7 +296,7 @@ class ColTaxonSourceManager(TaxonSourceManager):
                 break
 
         if DEBUG == True:
-            print('_get_next_sibling end, found %s' %(sibling.latname))
+            print('_get_next_sibling end, found {0}'.format(sibling.latname))
 
         return sibling
 
@@ -315,7 +315,7 @@ class ColTaxonSourceManager(TaxonSourceManager):
         colCursor.execute('''SELECT * FROM taxon WHERE "taxonID" = %s ''',
                           [db_taxon['parentNameUsageID'],])
 
-        db_parent = colCursor.fetone()
+        db_parent = colCursor.fetchone()
   
         if db_parent:
             parent = self._sourcetaxon_from_db_taxon(db_parent)

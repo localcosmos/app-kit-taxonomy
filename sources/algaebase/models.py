@@ -15,7 +15,7 @@ class AlgaebaseTaxonSynonym(TaxonSynonym):
 
 
 class AlgaebaseTaxonLocale(TaxonLocale):
-    taxon = models.ForeignKey(algaebaseTaxonTree, on_delete=models.CASCADE, to_field='name_uuid')
+    taxon = models.ForeignKey(AlgaebaseTaxonTree, on_delete=models.CASCADE, to_field='name_uuid')
 
     class Meta:
         index_together = [
