@@ -95,11 +95,18 @@ class TaxonSearch(object):
             else:
 
                 if name.name_type == 'accepted name':
-                    label = '{0}'.format(name.name)
+
+                    if name.taxon_author:
+                        label = '{0} {1}'.format(name.name, name.taxon_author)
+                    else:
+                        label = '{0}'.format(name.name)
                 
                 elif name.name_type == 'synonym':
-                    label = '{0} (syn. {1})'.format(name.taxon_latname, name.name)
-
+                    if name.taxon_author:
+                        label = '{0} {1} [syn. {2}]'.format(name.taxon_latname, name.taxon_author, name.name)
+                    else:
+                        label = '{0} [syn. {1}]'.format(name.taxon_latname, name.name)
+                    
                 elif name.name_type == 'vernacular':
                     label = '{0} ({1})'.format(name.name, name.taxon_latname)
 
