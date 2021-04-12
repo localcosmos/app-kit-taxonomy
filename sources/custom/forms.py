@@ -25,10 +25,10 @@ class ManageCustomTaxonForm(LocalizeableForm):
 
     parent_name_uuid = forms.UUIDField(widget=forms.HiddenInput, required=False)
     name_uuid = forms.UUIDField(widget=forms.HiddenInput, required=False)
-    latname = forms.CharField(label=_('Language-independent name'), help_text=_('e.g. the Latin name'))
+    taxon_latname = forms.CharField(label=_('Language-independent name'), help_text=_('e.g. the Latin name'))
+    taxon_author = forms.CharField(label=_('Author'), required=False)
     name = forms.CharField(help_text=_('Vernacular name'))
     rank = forms.ChoiceField(required=False, choices=TAXON_RANK_CHOICES)
-    author = forms.CharField(required=False)
 
     localizeable_fields = ['name']
 

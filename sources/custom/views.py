@@ -60,9 +60,9 @@ class ManageCustomTaxon(FormView):
             
             initial = {
                 'name_uuid' : self.taxon.name_uuid,
-                'latname' : self.taxon.taxon_latname,
+                'taxon_latname' : self.taxon.taxon_latname,
+                'taxon_author' : self.taxon.taxon_author,
                 'rank' : self.taxon.rank,
-                'author' : self.taxon.author,
             }
 
             if self.locale:
@@ -115,29 +115,32 @@ class ManageCustomTaxon(FormView):
             if last_sibling:
                 nuid = nuidmanager.next_nuid(last_sibling.taxon_nuid)
             else:
-                nuid = '%s%s' % (parent_nuid, nuidmanager.decimal_to_nuid(1))
+                nuid = '{0}{1}'.format(parent_nuid, nuidmanager.decimal_to_nuid(1))
 
-            # create the taxon .create(nuid, latname, source_id, **extra_fields)
+            # create the taxon .create(nuid, taxon_latname, taxon_author, source_id, **extra_fields)
 
             extra_fields = {
                 'rank' : form.cleaned_data.get('rank', None),
-                'author' : form.cleaned_data.get('author', None),
             }
 
             if not self.parent_taxon:
                 extra_fields['is_root_taxon'] = True
+
+            else:
+                extra_fields['parent'] = self.parent_taxon
             
             self.taxon = custom_taxon_models.TaxonTreeModel.objects.create(
                         nuid,
-                        form.cleaned_data['latname'],
+                        form.cleaned_data['taxon_latname'],
+                        form.cleaned_data.get('taxon_author', None),
                         nuid,
                         **extra_fields
                     )
 
         else:
-            self.taxon.taxon_latname = form.cleaned_data['latname']
+            self.taxon.taxon_latname = form.cleaned_data['taxon_latname']
             self.taxon.rank = form.cleaned_data.get('rank', None)
-            self.taxon.author = form.cleaned_data.get('author', None)
+            self.taxon.taxon_author = form.cleaned_data.get('taxon_author', None)
 
             self.taxon.save()
 
@@ -169,7 +172,11 @@ class DeleteTaxon(AjaxDeleteView):
         context['deleted_object_id'] = self.object.pk
         context['deleted'] = True
 
-        self.model.objects.filter(taxon_nuid__startswith=self.object.taxon_nuid).delete()
+        taxon_with_descendants = self.model.objects.filter(taxon_nuid__startswith=self.object.taxon_nuid).order_by('-taxon_nuid')
+
+        for taxon in taxon_with_descendants:
+            taxon.delete()
+            
         return self.render_to_response(context)
 
 
@@ -188,10 +195,14 @@ class ManageCustomTaxonTree(TaxonTreeView):
 
         nuidmanager = NuidManager()
 
-        for counter, latname in enumerate(self.initial_root_taxa, 1):
+        taxon_author = self.request.user.username
+
+        for counter, taxon_latname in enumerate(self.initial_root_taxa, 1):
             source_id = counter
             nuid = nuidmanager.decimal_to_nuid(counter)
-            self.models.TaxonTreeModel.objects.create(nuid, latname, source_id, is_root_taxon=True, rank='kingdom')
+
+            # nuid, taxon_latname, taxon_author, source_id,
+            self.models.TaxonTreeModel.objects.create(nuid, taxon_latname, taxon_author, source_id, is_root_taxon=True, rank='kingdom')
 
 
     def get_root_taxa(self):
