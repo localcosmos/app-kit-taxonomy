@@ -100,29 +100,35 @@ class LazyTaxon(LazyTaxonBase):
 
         return None
 
-    def all_vernacular_names(self, only_preferred=True, cache=None):
+    def all_vernacular_names(self, only_preferred=True, cache=None, language=None):
 
         matches = []
-        found_locales = []
-        
-        locales = MetaVernacularNames.objects.filter(taxon_latname=self.taxon_latname,
-                                                     taxon_author=self.taxon_author)
 
-        if only_preferred:
-            locales = locales.filter(preferred=True)
+        if not language:
+            found_locales = []
+            
+            locales = MetaVernacularNames.objects.filter(taxon_latname=self.taxon_latname,
+                                                         taxon_author=self.taxon_author)
 
-        for locale in locales:
-            matches.append(locale)
-            found_locales.append(locale.language)
+            if only_preferred:
+                locales = locales.filter(preferred=True)
 
-        locales = self.models.TaxonLocaleModel.objects.filter(taxon__taxon_latname=self.taxon_latname,
-                                    taxon__taxon_author=self.taxon_author).exclude(language__in=found_locales)
+            for locale in locales:
+                matches.append(locale)
+                found_locales.append(locale.language)
 
-        #if only_preferred:
-        #    locales = locales.filter(preferred=True)
+            locales = self.models.TaxonLocaleModel.objects.filter(taxon__taxon_latname=self.taxon_latname,
+                                        taxon__taxon_author=self.taxon_author).exclude(language__in=found_locales)
 
-        for locale in locales:
-            matches.append(locale)
+            #if only_preferred:
+            #    locales = locales.filter(preferred=True)
+
+            for locale in locales:
+                matches.append(locale)
+
+        else:
+            matches = self.models.TaxonLocaleModel.objects.filter(taxon__taxon_latname=self.taxon_latname,
+                                        taxon__taxon_author=self.taxon_author, language=language)
 
         return matches
         
