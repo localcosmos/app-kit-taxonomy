@@ -42,6 +42,16 @@ class LazyTaxon(LazyTaxonBase):
         return None
 
 
+    def synonyms(self):
+        tree_instance = self.tree_instance()
+        synonyms = []
+        
+        if tree_instance:
+            synonyms = self.models.TaxonSynonymModel.objects.filter(taxon=tree_instance)
+
+        return synonyms
+
+
     def exists_as_synonym(self):
         instance = self.synonym_instance()
         if instance:
