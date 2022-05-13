@@ -23,7 +23,7 @@ class LazyTaxon(LazyTaxonBase):
 
     '''
     the tree instance can be none, if the taxon does not exist anymore in the tree
-    - do NOT query by name_uuid, which might change across tree updates
+    - preferrably do NOT query by name_uuid
     - DO query taxon_latname AND taxon_author
     '''
     def tree_instance(self):
@@ -57,6 +57,7 @@ class LazyTaxon(LazyTaxonBase):
         if instance:
             return True
         return False
+
         
     def synonym_instance(self):
         query = self.models.TaxonSynonymModel.objects.filter(taxon_latname=self.taxon_latname,
@@ -72,7 +73,20 @@ class LazyTaxon(LazyTaxonBase):
                 return instance
 
         return None
-        
+
+
+    def preferred_name_lazy_taxon(self):
+        synonym_instance = self.synonym_instance()
+        tree_instance = self.tree_instance()
+
+        if tree_instance:
+            return self
+
+        elif synonym_instance:
+            lazy_taxon = LazyTaxon(instance=synonym_instance.taxon)
+            return lazy_taxon
+
+        return None
     
 
     def vernacular(self, language=None, cache=None):
