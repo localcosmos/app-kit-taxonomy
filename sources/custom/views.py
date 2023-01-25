@@ -166,9 +166,8 @@ from localcosmos_server.generic_views import AjaxDeleteView
 class DeleteTaxon(AjaxDeleteView):
     model = custom_taxon_models.TaxonTreeModel
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        context = self.get_context_data(**kwargs)
+    def form_valid(self, form):
+        context = self.get_context_data(**self.kwargs)
         context['deleted_object_id'] = self.object.pk
         context['deleted'] = True
 

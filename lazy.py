@@ -104,6 +104,7 @@ class LazyTaxon(LazyTaxonBase):
         if language == None:
             language = translation.get_language()[:2].lower()
 
+        # first use the MetaVernacularNames
         locale = MetaVernacularNames.objects.filter(taxon_latname=self.taxon_latname,
                     taxon_author=self.taxon_author, language=language, preferred=True).first()
 

@@ -3,10 +3,10 @@ from django.db import models
 '''
     enable the Catalogue Of Life
     all LocalCosmos enabled taxonomic dbs need 4 models:
-    - *Taxon
+    - *TaxonTree
     - *TaxonLocale
     - *TaxonNuid
-    - *TaxonTree
+    - *TaxonNamesView
 
     plus one TaxonDBManager.py file
 '''
