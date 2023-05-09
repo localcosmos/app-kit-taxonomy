@@ -78,19 +78,28 @@ class TaxonSearch(object):
 
         for name in names:
 
+            # CustomTaxonLocale has no attribute taxon_latname
+            if self.taxon_source == 'taxonomy.sources.custom':
+                taxon = name.taxon
+            else:
+                taxon = name
+
             taxon_kwargs = {
                 'taxon_source' : self.taxon_source,
-                'taxon_latname' : name.taxon_latname,
-                'taxon_author' : name.taxon_author,
-                'taxon_nuid' : name.taxon_nuid,
-                'name_uuid' : name.name_uuid,
+                'taxon_latname' : taxon.taxon_latname,
+                'taxon_author' : taxon.taxon_author,
+                'taxon_nuid' : taxon.taxon_nuid,
+                'name_uuid' : taxon.name_uuid,
             }
             
             lazy_taxon = LazyTaxon(**taxon_kwargs)
 
             if self.taxon_source == 'taxonomy.sources.custom':
 
-                label = name.taxon_latname
+                if name.__class__.__name__ == 'CustomTaxonLocale':
+                    label = '{0} ({1})'.format(name.name, taxon.taxon_latname)
+                else:
+                    label = taxon.taxon_latname
 
             else:
 
@@ -111,10 +120,8 @@ class TaxonSearch(object):
                     label = '{0} ({1})'.format(name.name, name.taxon_latname)
 
             obj = lazy_taxon.as_typeahead_choice(label=label)
-            
                 
             if obj not in choices:
                 choices.append(obj)
-
 
         return choices
