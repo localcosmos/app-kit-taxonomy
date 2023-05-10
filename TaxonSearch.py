@@ -79,7 +79,7 @@ class TaxonSearch(object):
         for name in names:
 
             # CustomTaxonLocale has no attribute taxon_latname
-            if self.taxon_source == 'taxonomy.sources.custom':
+            if self.taxon_source == 'taxonomy.sources.custom' and name.__class__.__name__ == 'CustomTaxonLocale':
                 taxon = name.taxon
             else:
                 taxon = name
