@@ -1,6 +1,7 @@
 from taxonomy.models import TaxonomyModelRouter, MetaVernacularNames
 
 from django.utils import translation
+from django.conf import settings
 
 from localcosmos_server.taxonomy.lazy import LazyTaxonBase
 
@@ -156,6 +157,23 @@ class LazyTaxon(LazyTaxonBase):
                                         taxon__taxon_author=self.taxon_author, language=language)
 
         return matches
+
+    def get_primary_locale_vernacular_name_from_nature_guides(self, meta_app):
+        from app_kit.features.nature_guides.models import NatureGuide, MetaNode
+        installed_taxonomic_sources = [s[0] for s in settings.TAXONOMY_DATABASES]
+
+        if self.taxon_source in installed_taxonomic_sources:
+
+            nature_guide_links = meta_app.get_generic_content_links(NatureGuide)
+            nature_guide_ids = nature_guide_links.values_list('object_id', flat=True)
+
+            meta_node = MetaNode.objects.filter(nature_guide_id__in=nature_guide_ids,
+                name_uuid=self.name_uuid).first()
+
+            if meta_node:
+                return meta_node.name
+        
+        return None
         
 
     def descendants(self):
