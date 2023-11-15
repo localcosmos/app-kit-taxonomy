@@ -14,7 +14,9 @@ from taxonomy.models import TaxonTree, TaxonSynonym, TaxonNamesView, TaxonLocale
 
 
 class ColTaxonTree(TaxonTree):
-    pass
+    
+    class Meta:
+        verbose_name = 'Catalogue of Life'
 
 
 class ColTaxonSynonym(TaxonSynonym):

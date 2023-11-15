@@ -6,7 +6,8 @@ from django.db import models
 from taxonomy.models import TaxonTree, TaxonSynonym, TaxonNamesView, TaxonLocale
 
 class CustomTaxonTree(TaxonTree):
-    pass
+    class Meta:
+        verbose_name = 'Custom Taxonomy'
 
 
 class CustomTaxonSynonym(TaxonSynonym):
