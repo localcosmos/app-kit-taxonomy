@@ -1,2 +1,4 @@
 *.pyc
 __pycache__
+dist/
+localcosmos_app_kit_taxonomy.egg-info/
