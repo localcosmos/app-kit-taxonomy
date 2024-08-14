@@ -108,7 +108,7 @@ class TaxonSynonymManager(models.Manager):
 
     def create(self, taxon, taxon_latname, taxon_author, source_id, **extra_fields):
 
-        slug = create_unique_slug(latname, 'slug', self.model)
+        slug = create_unique_slug(taxon_latname, 'slug', self.model)
 
         instance = self.model(
             taxon=taxon,

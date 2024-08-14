@@ -1,8 +1,6 @@
 ####################################################################################################################
 #
-#   IMPORT CATALOGUE OF LIFE 2024
-#   - uses ColDP format as a source
-#   - operates on the "nameusage" table of col2024
+#   IMPORT CATALOGUE OF LIFE 2019
 #
 ####################################################################################################################
 
@@ -11,31 +9,34 @@ from taxonomy.sources.TaxonSourceManager import (TaxonSourceManager, SourceTreeT
 
 from taxonomy.sources.col.models import ColTaxonTree, ColTaxonSynonym, ColTaxonLocale
 
-import psycopg2, psycopg2.extras
+import psycopg2, psycopg2.extras, os, csv
+
+from html.parser import HTMLParser
 
 
 
 # the CoL2019 uses language names like "English" -> use langcodes
-import langcodes, html
+import langcodes
 
 DEBUG = False
 
 '''
-    db interface for col 2024 postgres db
+    db interface for col 2019 postgres db
 '''
 
 
-colCon = psycopg2.connect(dbname="col2024", user="localcosmos", password="localcosmos", host="", port="5432")
+colCon = psycopg2.connect(dbname="col2019", user="localcosmos", password="localcosmos", host="localhost", port="5432")
 colCursor = colCon.cursor(cursor_factory = psycopg2.extras.DictCursor)
 
 
 MAPPED_TAXON_RANKS = {
-    "infraspecific name" : "infraspecies",
+    "subsp" : "subspecies",
+    "sub-variety" : "subvariety",
 }
 
-SOURCE_NAME = 'col2024'
+SOURCE_NAME = 'col2019'
 
-RANKS = ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species'] 
+RANKS = ['kingdom', 'phylum', 'class', 'order', 'superfamily', 'family', 'genus', 'species', 'infraspecies'] 
 
 
 class ColSourceTreeTaxon(SourceTreeTaxon):
@@ -45,7 +46,7 @@ class ColSourceTreeTaxon(SourceTreeTaxon):
     def _get_source_object(self):
         
         # return a db_taxon instance
-        colCursor.execute('''SELECT * FROM nameusage where "id"=%s''', [self.source_id])
+        colCursor.execute('''SELECT * FROM taxon where "taxonID"=%s''', [self.source_id])
         db_taxon = colCursor.fetchone()
         
         return db_taxon
@@ -54,7 +55,7 @@ class ColSourceTreeTaxon(SourceTreeTaxon):
     # return VernacularName[]
     def _get_vernacular_names(self):
 
-        colCursor.execute('''SELECT * FROM vernacularname WHERE "taxonid"=%s''', [self.source_id])
+        colCursor.execute('''SELECT * FROM vernacular WHERE "taxonID"=%s''', [self.source_id])
 
         vernacular_names_db = colCursor.fetchall()
 
@@ -64,7 +65,7 @@ class ColSourceTreeTaxon(SourceTreeTaxon):
         
         for db_name in vernacular_names_db:
 
-            name = db_name['name']                
+            name = db_name['vernacularName']                
             
             language_fuzzy = db_name['language']
 
@@ -120,16 +121,35 @@ class ColSourceTreeTaxon(SourceTreeTaxon):
 
     @classmethod
     def get_scientific_name(cls, db_taxon):
-        return db_taxon['scientificname']
 
+        taxon_rank = db_taxon['taxonRank']
+
+        is_species_or_below = RANKS.index(taxon_rank) >= RANKS.index('species')
+
+        if is_species_or_below:
+
+            infraspecific_epithet = db_taxon['infraspecificEpithet']
+
+            scientific_name = '{0} {1}'.format(db_taxon['genus'], db_taxon['specificEpithet'])
+
+            if infraspecific_epithet:
+                scientific_name = '{0} {1}'.format(scientific_name, infraspecific_epithet)
+            
+            scientific_name = scientific_name.strip()
+
+        else:
+            scientific_name = db_taxon[taxon_rank]
+
+        return scientific_name
+    
 
     # return SourceTaxon[]
     # use _search_all for synonyms
     def _get_synonyms(self):
         # only do this for species becuase of col's way of handling this
         
-        synonyms_query = colCursor.execute('''SELECT * FROM nameusage
-                        WHERE "parentid"=%s AND "status" IN ('synonym', 'ambiguous synonym');''',
+        synonyms_query = colCursor.execute('''SELECT * FROM taxon
+                        WHERE "acceptedNameUsageID"=%s AND "taxonomicStatus" IN ('synonym', 'ambiguous synonym');''',
                                            [self.source_id])
 
         synonyms = []
@@ -148,8 +168,8 @@ class ColSourceTreeTaxon(SourceTreeTaxon):
             used_latnames.append(taxon_name)
                 
             synonym = ColSourceSynonymTaxon(
-                taxon_name, db_taxon['authorship'], db_taxon['rank'], SOURCE_NAME,
-                db_taxon['id']
+                taxon_name, db_taxon['scientificNameAuthorship'], db_taxon['taxonRank'], SOURCE_NAME,
+                db_taxon['taxonID']
             )
 
             synonyms.append(synonym)
@@ -168,7 +188,7 @@ class ColTreeCache(TreeCache):
     
     def _make_source_taxon(self, db_taxon):
         return ColSourceTreeTaxon(
-            db_taxon.taxon_latname, db_taxon.taxon_author, db_taxon.rank, 'ColTaxonTree', db_taxon.source_id,
+            db_taxon.taxon_latname, db_taxon.author, db_taxon.rank, 'ColTaxonTree', db_taxon.source_id,
             nuid = db_taxon.taxon_nuid
         )
 
@@ -183,13 +203,18 @@ class ColTaxonSourceManager(TaxonSourceManager):
 
     TreeCacheClass = ColTreeCache
 
-
+    '''
+    author sits in different table
+    '''
     def _get_author(self, db_taxon):
         
-        author_string = db_taxon['authorship']
+        author_string = db_taxon['scientificNameAuthorship']
 
         if author_string is not None:
-            author_string = html.unescape(author_string)
+
+            h = HTMLParser()
+
+            author_string = h.unescape(author_string)
 
         return author_string
     
@@ -201,9 +226,9 @@ class ColTaxonSourceManager(TaxonSourceManager):
         source_taxon = self.SourceTreeTaxonClass(
             taxon_name,
             self._get_author(db_taxon),
-            db_taxon['rank'],
+            db_taxon['taxonRank'],
             SOURCE_NAME,
-            db_taxon['id'],
+            db_taxon['taxonID'],
         )
 
         return source_taxon
@@ -214,7 +239,7 @@ class ColTaxonSourceManager(TaxonSourceManager):
 
         root_taxa = []
         
-        colCursor.execute('''SELECT * FROM nameusage where "rank"='kingdom' and "status"='accepted' and "code"!='virus' ORDER BY "scientificname" ''')
+        colCursor.execute('''SELECT * FROM taxon where "taxonRank"='kingdom' ORDER BY "scientificName" ''')
 
         kingdoms = colCursor.fetchall()
 
@@ -231,7 +256,7 @@ class ColTaxonSourceManager(TaxonSourceManager):
 
         children = []
         
-        colCursor.execute('''SELECT * FROM nameusage WHERE "parentid" = %s AND ("status" IS NULL OR "status" = 'accepted' OR "status" = 'provisionally accepted') ORDER BY "scientificname" ASC, "status" ASC ''',
+        colCursor.execute('''SELECT * FROM taxon WHERE "parentNameUsageID" = %s AND ("taxonomicStatus" IS NULL OR "taxonomicStatus" = 'accepted name' OR "taxonomicStatus" = 'provisionally accepted name') ORDER BY "scientificName" ASC, "taxonomicStatus" ASC ''',
                           [source_taxon.source_id,])
 
         db_children = colCursor.fetchall()
@@ -239,7 +264,7 @@ class ColTaxonSourceManager(TaxonSourceManager):
             source_taxon = self._sourcetaxon_from_db_taxon(child)
             children.append(source_taxon)
 
-        children.sort(key=lambda taxon: taxon.latname)
+
         if DEBUG == True:
             print('_get_children end')
         
@@ -262,7 +287,7 @@ class ColTaxonSourceManager(TaxonSourceManager):
         
         for source_sibling_taxon in siblings:
             
-            if source_sibling_taxon.source_id == source_taxon.source_id:
+            if int(source_sibling_taxon) == int(source_taxon.source_id):
 
                 # if the match is not the last entry of siblings assign sibling
                 if not siblings.index(source_sibling_taxon) == (len(siblings) - 1):
@@ -287,8 +312,8 @@ class ColTaxonSourceManager(TaxonSourceManager):
 
         db_taxon = source_taxon._get_source_object()
 
-        colCursor.execute('''SELECT * FROM nameusage WHERE "id" = %s ''',
-                          [db_taxon['parentid'],])
+        colCursor.execute('''SELECT * FROM taxon WHERE "taxonID" = %s ''',
+                          [db_taxon['parentNameUsageID'],])
 
         db_parent = colCursor.fetchone()
   
@@ -307,17 +332,17 @@ def compare():
     limit = 10000
     offset = 0
 
-    source_query = '''SELECT * FROM nameusage WHERE "status" IS NULL OR "status" = 'accepted' OR "status" = 'provisionally accepted' ORDER BY "id" LIMIT %s OFFSET %s''' %(limit, offset)
+    source_query = '''SELECT * FROM taxon WHERE "taxonomicStatus" IS NULL OR "taxonomicStatus" = 'accepted name' OR "taxonomicStatus" = 'provisionally accepted name' ORDER BY "taxonID" LIMIT %s OFFSET %s''' %(limit, offset)
     colCursor.execute(source_query)
     taxa = colCursor.fetchall()
 
     while taxa:
 
         for taxon in taxa:
-            if not ColTaxonTree.objects.filter(source_id=taxon['id']).exists():
-                print('missing: %s %s (%s)' % (taxon['id'], taxon['scientificname'], taxon['rank']))
+            if not ColTaxonTree.objects.filter(source_id=taxon['taxonID']).exists():
+                print('missing: %s %s (%s)' % (taxon['taxonID'], taxon['scientificName'], taxon['taxonRank']))
 
         offset += limit
-        source_query = '''SELECT * FROM nameusage WHERE "status" IS NULL OR "status" = 'accepted' OR "status" = 'provisionally accepted' ORDER BY "id" LIMIT %s OFFSET %s''' %(limit, offset)
+        source_query = '''SELECT * FROM taxon WHERE "taxonomicStatus" IS NULL OR "taxonomicStatus" = 'accepted name' OR "taxonomicStatus" = 'provisionally accepted name' ORDER BY "taxonID" LIMIT %s OFFSET %s''' %(limit, offset)
         colCursor.execute(source_query)
         taxa = colCursor.fetchall()

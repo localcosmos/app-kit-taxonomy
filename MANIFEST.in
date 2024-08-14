@@ -1,2 +1,3 @@
 recursive-include taxonomy/templates *
+recursive-include taxonomy/sources/custom/templates *
 

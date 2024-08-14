@@ -13,8 +13,6 @@ from django.db.models.functions import Length
 import sys, os, json
 import time
 
-from localcosmos_server.slugifier import create_unique_slug
-
 from django.db import transaction
 
 '''
@@ -22,9 +20,7 @@ from django.db import transaction
 '''
 
 # Python 3
-from html.parser import HTMLParser
-
-import logging
+import logging, html
 
 
 '''
@@ -90,8 +86,7 @@ def n2d(nuid):
 class VernacularName:
 
     def __init__(self, name, language, preferred=False, iso6392=None):
-        parser = HTMLParser()
-        self.name = parser.unescape(name.strip())
+        self.name = html.unescape(name.strip())
         self.language = language.strip().lower() # iso6391 en, fr, de
         self.preferred = preferred
         self.iso6392 = iso6392 # 3-digit
@@ -211,6 +206,8 @@ class SourceTreeTaxon(SourceTaxon):
             db_entry = self.TreeModel.objects.filter(source_id=self.source_id).first()
             if db_entry:
                 self.nuid = db_entry.taxon_nuid
+            else:
+                print('No db entry found for source_id: {0}'.format(self.source_id))
 
         return self.nuid
 
@@ -437,7 +434,7 @@ class TreeCache:
     def _build_upstream(self):
         
         if self.upstream_is_built:
-            raise ValueError('source_taxon %s not found in tree' % source_taxon.latname)
+            raise ValueError('Upstream already built')
 
         toplevel = self.cache[0]
 
@@ -691,7 +688,7 @@ class TaxonSourceManager:
         
         # check for existing taxa and assign their nuids, needed for db update
         for taxon in root_taxa:
-            lc_db_taxon = self.TaxonTreeModel.objects.filter(is_root_taxon=True, taxon_latname=taxon.latname).first()
+            lc_db_taxon = self.TaxonTreeModel.objects.filter(is_root_taxon=True, taxon_latname=taxon.latname).order_by('taxon_latname').first()
             if lc_db_taxon:
                 # use the database nuid
                 taxon.set_nuid(lc_db_taxon.taxon_nuid)
@@ -706,7 +703,7 @@ class TaxonSourceManager:
         # work ALL root_taxa, starting with the first one
         root_taxon = root_taxa[0]
 
-        print('working new root taxon: %s' % root_taxon.latname)            
+        print('working new root taxon: {0}'.format(root_taxon.latname))            
         self.state.set_current_root_taxon(root_taxon)
             
         self._climb_tree(root_taxon)
@@ -751,7 +748,7 @@ class TaxonSourceManager:
 
             message = 'last_child: {0}, nuid: {1}'.format(last_child.latname, last_child.get_nuid())
             print(message)
-            self.logger.info(message)
+            # self.logger.info(message)
 
             # search siblings of this childless taxon, or parent siblings if no siblings available
             # start_taxon is always the last child, which is the first child of the last group of children
@@ -769,7 +766,7 @@ class TaxonSourceManager:
                 start_taxon = next_parent
                 message = 'starting nuid (next_parent): {0}'.format(start_taxon.get_nuid())
                 print(message)
-                self.logger.info(message)
+                # self.logger.info(message)
                 
             else:
                 continue_climbing = False
@@ -889,14 +886,15 @@ class TaxonSourceManager:
         existing_children = []
         existing_children_map = {}
         
-        for taxon in existing_children_query:
-            existing_children.append({'author': taxon.taxon_author, 'latname': taxon.taxon_latname})
+        if self.first_run == False:
+            for taxon in existing_children_query:
+                existing_children.append({'author': taxon.taxon_author, 'latname': taxon.taxon_latname})
 
-            author = taxon.taxon_author
-            if not author:
-                author = 'None'
-            key = " ".join([taxon.taxon_latname, author])
-            existing_children_map[key] = taxon
+                author = taxon.taxon_author
+                if not author:
+                    author = 'None'
+                key = " ".join([taxon.taxon_latname, author])
+                existing_children_map[key] = taxon
 
         for child in children:
 
@@ -916,7 +914,7 @@ class TaxonSourceManager:
                 self._check_existing_taxon_vernacular_names(existing_taxon, child)
 
                 existing_taxon_source_taxon = self.SourceTreeTaxonClass(
-                    existing_taxon.taxon_latname, existing_taxon.author, existing_taxon.rank,
+                    existing_taxon.taxon_latname, existing_taxon.taxon_author, existing_taxon.rank,
                     self.TaxonTreeModel.__class__.__name__, existing_taxon.source_id, nuid=existing_taxon.taxon_nuid
                 )
                 cache_children.append(existing_taxon_source_taxon)
@@ -1039,11 +1037,14 @@ class TaxonSourceManager:
         
     def _climb_down(self, parent_taxon):
 
-        self.logger.info('climb down: {0}'.format(parent_taxon.latname))
+        message = 'climb down: {0}'.format(parent_taxon.latname)
+        print(message)
+        # self.logger.info(message)
 
         # if no nuid is found, it might be a duplicate
         is_duplicate = self._check_taxon_duplicate(parent_taxon)
         if is_duplicate:
+            self.logger.info('Duplicate: {0}'.format(parent_taxon.latname))
             return parent_taxon
 
         self.state.set_last_parent(parent_taxon)
@@ -1066,11 +1067,11 @@ class TaxonSourceManager:
                 parent_taxon = children[0]
                 first_child = children[0]
 
-                self.logger.info('first child: {0}'.format(first_child.latname))
+                # self.logger.info('first child: {0}'.format(first_child.latname))
 
             else:
 
-                self.logger.info('no more children found for: {0}'.format(parent_taxon.latname))
+                # self.logger.info('no more children found for: {0}'.format(parent_taxon.latname))
                 
                 if self.first_run == False:
                     # check if there are children in the database thet need to be deleted
@@ -1086,8 +1087,8 @@ class TaxonSourceManager:
         # if a parent_taxon that has no children is passed, return the parent taxon
         # the tree climber will then go to the next sibling - as it would with the first_child
         if first_child is None:
-            self.logger.info('climb down returning: {0}'.format(parent_taxon.latname))
+            self.logger.info('[_climb_down] No first child found. Returning: {0}'.format(parent_taxon.latname))
             return parent_taxon
 
-        self.logger.info('climb down: {0}'.format(first_child.latname))
+        # self.logger.info('climb down: {0}'.format(first_child.latname))
         return first_child
