@@ -167,16 +167,12 @@ class ManageCustomTaxonTree(TaxonTreeView):
 
     def create_initial_root_taxa(self):
 
-        nuidmanager = NuidManager()
-
         taxon_author = self.request.user.username
 
-        for counter, taxon_latname in enumerate(self.initial_root_taxa, 1):
-            source_id = counter
-            nuid = nuidmanager.decimal_to_nuid(counter)
+        for taxon_latname in self.initial_root_taxa:
 
-            # nuid, taxon_latname, taxon_author, source_id,
-            self.models.TaxonTreeModel.objects.create(nuid, taxon_latname, taxon_author, source_id, is_root_taxon=True, rank='kingdom')
+            # taxon_latname, taxon_author
+            self.models.TaxonTreeModel.objects.create(taxon_latname, taxon_author, is_root_taxon=True, rank='kingdom')
 
 
     def get_root_taxa(self):

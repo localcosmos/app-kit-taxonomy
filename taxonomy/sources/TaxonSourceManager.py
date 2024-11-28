@@ -648,7 +648,7 @@ class TaxonSourceManager:
 
     '''
     this does not perform any checks, it just saves
-    - do not uise objects.create() - which will create unique slugs which is slow
+    - do not use objects.create() - which will create unique slugs which is slow
     '''
     def _save_taxon_synonym(self, db_taxon, source_synonym):
 
