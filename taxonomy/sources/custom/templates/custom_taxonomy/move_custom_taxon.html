@@ -33,11 +33,17 @@
 
 		var new_parent_element_id = '#{{ new_parent_taxon.name_uuid }}-children';
 
+		var new_parent_element_notaxa = $('#{{ new_parent_taxon.name_uuid }}-notaxa');
+
 		if ($(new_parent_element_id).length){
 			$("#ctype-{{ taxon|ctype_id }}-{{ taxon.id }}").detach().appendTo(new_parent_element_id);
 		}
 		else {
 			$("#ctype-{{ taxon|ctype_id }}-{{ taxon.id }}").remove();
+		}
+
+		if (new_parent_element_notaxa.length){
+			new_parent_element_notaxa.remove();
 		}
 	{% endif %}
 </script>

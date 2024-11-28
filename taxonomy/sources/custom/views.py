@@ -5,12 +5,11 @@
     - the standalone uses taxonomy as a service - TaaS for querying custom taxa etc
     - alternatively fills its own db by querying a service - on demand
 '''
-from django.views.generic import TemplateView, FormView
+from django.views.generic import FormView
 
 from .forms import ManageCustomTaxonForm, MoveCustomTaxonForm
 
 from taxonomy.models import TaxonomyModelRouter
-from taxonomy.sources.TaxonSourceManager import d2n
 from taxonomy.utils import NuidManager
 from taxonomy.lazy import LazyTaxon
 
@@ -23,6 +22,7 @@ custom_taxon_models = TaxonomyModelRouter('taxonomy.sources.custom')
 from django.db.models import CharField
 from django.db.models.functions import Length
 CharField.register_lookup(Length, 'length')
+
 
 class ManageCustomTaxon(FormView):
 
@@ -95,30 +95,7 @@ class ManageCustomTaxon(FormView):
         
         if self.taxon is None:
             created = True
-
-            nuidmanager = NuidManager()
-
-            if self.parent_taxon:
-                parent_nuid = self.parent_taxon.taxon_nuid
-                children_nuid_length = len(parent_nuid) + 3
-
-                last_sibling = custom_taxon_models.TaxonTreeModel.objects.filter(taxon_nuid__startswith=parent_nuid,
-                    taxon_nuid__length=children_nuid_length).order_by('taxon_nuid').last()
-                
-            else:
-                parent_nuid = ''
-                # it is a new root_taxon
-                last_sibling = custom_taxon_models.TaxonTreeModel.objects.filter(
-                    is_root_taxon=True).order_by('id').last()
-
-            # create the nuid
-            if last_sibling:
-                nuid = nuidmanager.next_nuid(last_sibling.taxon_nuid)
-            else:
-                nuid = '{0}{1}'.format(parent_nuid, nuidmanager.decimal_to_nuid(1))
-
-            # create the taxon .create(nuid, taxon_latname, taxon_author, source_id, **extra_fields)
-
+            
             extra_fields = {
                 'rank' : form.cleaned_data.get('rank', None),
             }
@@ -128,14 +105,12 @@ class ManageCustomTaxon(FormView):
 
             else:
                 extra_fields['parent'] = self.parent_taxon
-            
+                
             self.taxon = custom_taxon_models.TaxonTreeModel.objects.create(
-                        nuid,
-                        form.cleaned_data['taxon_latname'],
-                        form.cleaned_data.get('taxon_author', None),
-                        nuid,
-                        **extra_fields
-                    )
+                form.cleaned_data['taxon_latname'],
+                form.cleaned_data.get('taxon_author', None),
+                **extra_fields
+            )
 
         else:
             self.taxon.taxon_latname = form.cleaned_data['taxon_latname']
@@ -251,45 +226,66 @@ class MoveCustomTaxonTreeEntry(FormView):
         context['taxon'] = self.taxon
         return context
 
-    def get_initial(self):
 
-        initial = {
-            'name_uuid' : self.taxon.name_uuid,
-        }
-
-        return initial
+    def get_form(self, form_class=None):
+        if form_class is None:
+            form_class = self.get_form_class()
+        return form_class(self.taxon, **self.get_form_kwargs())
 
 
-    def _update_nuids(self, taxon, Subclass):
-        taxa = Subclass.objects.filter(name_uuid=taxon.name_uuid)
-        for model_with_taxon in taxa:
-            model_with_taxon.taxon_nuid = taxon.taxon_nuid
-            model_with_taxon.save()
+    def update_nuids(self, taxon, Subclass):
+        taxa = Subclass.objects.filter(taxon_source='taxonomy.sources.custom', name_uuid=taxon.name_uuid)
+        taxa.update(taxon_nuid=taxon.taxon_nuid)
 
-    def _update_lazy_taxa(self, taxon):
+    def update_lazy_taxa(self, taxon):
         for Subclass in get_subclasses(ModelWithRequiredTaxon):
-            self._update_nuids(taxon, Subclass)
+            self.update_nuids(taxon, Subclass)
 
         for Subclass in get_subclasses(ModelWithTaxon):
-            self._update_nuids(taxon, Subclass)
+            self.update_nuids(taxon, Subclass)
+    
+    
+    def get_new_taxon_nuid(self, new_parent):
+        
+        nuid_manager = NuidManager()
+        
+        new_siblings = custom_taxon_models.TaxonTreeModel.objects.filter(
+            parent=new_parent).order_by('taxon_nuid')
+        
+        last_sibling = new_siblings.last()
+        
+        if last_sibling:
+            new_nuid = nuid_manager.next_nuid(last_sibling.taxon_nuid)
+        else:
+            new_nuid = '{0}001'.format(new_parent.taxon_nuid)
+        
+        return new_nuid
+        
 
     def form_valid(self, form):
         context = self.get_context_data(**self.kwargs)
 
         # move the taxon, use the form taxon as this has been validated against the new parent taxon
-        # a signal adjusts all nuids of the lazy taxa
-        form_taxon = custom_taxon_models.TaxonTreeModel.objects.get(name_uuid=form.cleaned_data['name_uuid'])
-        new_parent_taxon = form.cleaned_data['new_parent_taxon']
+        new_parent_lazy_taxon = form.cleaned_data['new_parent_taxon']
+        new_parent_taxon = custom_taxon_models.TaxonTreeModel.objects.get(name_uuid=new_parent_lazy_taxon.name_uuid)
 
-        new_nuid_prefix = new_parent_taxon.taxon_nuid
-        old_nuid_prefix = form_taxon.taxon_nuid[:-3]
+        old_taxon_nuid = self.taxon.taxon_nuid
+        new_taxon_nuid = self.get_new_taxon_nuid(new_parent_taxon)
+        
+        self.taxon.parent = new_parent_taxon
+        self.taxon.taxon_nuid = new_taxon_nuid
+        
+        self.taxon.save()
+        
+        # get all descendants
+        for descendant_taxon in custom_taxon_models.TaxonTreeModel.objects.filter(taxon_nuid__startswith=old_taxon_nuid):
 
-        for taxon in custom_taxon_models.TaxonTreeModel.objects.filter(taxon_nuid__startswith=form_taxon.taxon_nuid):
+            descendant_taxon.taxon_nuid = descendant_taxon.taxon_nuid.replace(
+                old_taxon_nuid, new_taxon_nuid, 1)
+            descendant_taxon.save()
 
-            taxon.taxon_nuid = taxon.taxon_nuid.replace(old_nuid_prefix, new_nuid_prefix, 1)
-            taxon.save()
-
-            self._update_lazy_taxa(taxon)
+            # update all occurrences across database
+            self.update_lazy_taxa(descendant_taxon)
 
         context['new_parent_taxon'] = new_parent_taxon
         context['success'] = True

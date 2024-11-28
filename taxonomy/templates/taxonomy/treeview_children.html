@@ -9,7 +9,7 @@
 		</div>
 	{% endfor %}
 {% else %}
-	<div class="row">
+	<div id="{{ parent_taxon.name_uuid }}-notaxa" class="row">
 		<div class="col-12 text-secondary">
 			{% trans 'No children found for this taxon.' %}
 		</div>

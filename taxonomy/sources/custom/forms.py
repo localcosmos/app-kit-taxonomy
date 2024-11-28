@@ -47,21 +47,21 @@ class ManageCustomTaxonForm(LocalizeableForm):
 
 
 class MoveCustomTaxonForm(forms.Form):
+    
+    def __init__(self, taxon, *args, **kwargs):
+        self.taxon = taxon
+        super().__init__(*args, **kwargs)
 
     new_parent_taxon = TaxonField(label=_('Move to'), help_text=_('Enter latin or vernacular name, then select.'),
                                   taxon_search_url=get_appkit_taxon_search_url, fixed_taxon_source='taxonomy.sources.custom')
-    
-    name_uuid = forms.UUIDField(widget=forms.HiddenInput)
 
     def clean(self):
 
-        name_uuid = self.cleaned_data.get('name_uuid', None)
         new_parent_taxon = self.cleaned_data.get('new_parent_taxon', None)
 
-        if name_uuid is not None and new_parent_taxon is not None:
-            taxon = custom_taxonomy_models.TaxonTreeModel.objects.get(name_uuid=name_uuid)
+        if new_parent_taxon is not None:
 
-            if new_parent_taxon.taxon_nuid.startswith(taxon.taxon_nuid):
+            if new_parent_taxon.taxon_nuid.startswith(self.taxon.taxon_nuid):
                 raise forms.ValidationError(_('Cannot move a taxon into its own descendants. Please select another taxon.'))
 
         return self.cleaned_data

@@ -1,15 +1,11 @@
-from django.shortcuts import render
-from django.http import HttpResponse, JsonResponse
-from django.utils import translation
+from django.http import HttpResponse
 from django.utils.translation import gettext as _
-
-from django.utils.decorators import method_decorator
-from django.contrib.auth.decorators import login_required
-from localcosmos_server.decorators import ajax_required
 
 from localcosmos_server.taxonomy.forms import AddSingleTaxonForm
 
-from django.views.generic import DetailView, TemplateView, FormView
+from taxonomy.models import TaxonomyModelRouter
+
+from django.views.generic import TemplateView, FormView
 
 import json
 
@@ -87,6 +83,7 @@ class TaxonTreeView(TemplateView):
         context = super().get_context_data(**kwargs)
         context['language'] = kwargs['language']
         context['taxa'] = self.get_taxa()
+        context['parent_taxon'] = self.taxon
         context['tree_entry_template'] = self.tree_entry_template_name
         context['meta_app'] = self.meta_app
         return context

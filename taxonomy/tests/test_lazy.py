@@ -1,4 +1,3 @@
-from webbrowser import get
 from taxonomy.lazy import LazyTaxon
 from taxonomy.models import TaxonomyModelRouter
 
