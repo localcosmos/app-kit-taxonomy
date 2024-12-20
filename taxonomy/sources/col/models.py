@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 '''
     enable the Catalogue Of Life
@@ -33,6 +34,8 @@ class ColTaxonLocale(TaxonLocale):
         index_together = [
             ['taxon', 'language'],
         ]
+        
+        verbose_name = _('Catalogue of Life')
     
 
 '''

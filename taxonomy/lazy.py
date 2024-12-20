@@ -1,6 +1,7 @@
 from taxonomy.models import TaxonomyModelRouter, MetaVernacularNames
 
 from django.utils import translation
+from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 
 from localcosmos_server.taxonomy.lazy import LazyTaxonBase
@@ -89,13 +90,72 @@ class LazyTaxon(LazyTaxonBase):
 
         return None
     
+    '''
+        vernacular names
+    '''    
+    def get_taxon_source_vernacular_name(self, language):
+        
+        vernacular_name = None
+        
+        locale = self.models.TaxonLocaleModel.objects.filter(name_uuid=self.name_uuid,
+            language=language, preferred=True).first()
+        
+        if not locale:
+            self.models.TaxonLocaleModel.objects.filter(name_uuid=self.name_uuid,
+                language=language).first()
+            
+        if locale:
+            vernacular_name = locale.name
+            
+        return vernacular_name
+            
+    
+    '''
+        1.: preferred name in MetaVernacularNames
+        2.: first name in MetaVernacularNames
+        2.: first name of occurrence in NatureGuide (if translation exists)
+        3.: preferred name in taxonomy_database.models.TaxonLocale
+        4.: first name in taxonomy_database.models.TaxonLocale
+    '''
+    def get_preferred_vernacular_name(self, language, meta_app=None):
+        preferred_vernacular_name = None
+        
+        meta_vernacular_names = MetaVernacularNames.objects.filter(taxon_source=self.taxon_source,
+                                                                   name_uuid=self.name_uuid)
+        
+        if meta_vernacular_names:
+            preferred_meta_vernacular_name = meta_vernacular_names.filter(preferred=True).first()
+            
+            if preferred_meta_vernacular_name:
+                preferred_vernacular_name = preferred_meta_vernacular_name.name
+        
+            if not preferred_vernacular_name:
+                meta_vernacular_name = meta_vernacular_names.first()
+                preferred_vernacular_name = meta_vernacular_name.name
+        
+        if self.taxon_source == 'taxonomy.sources.custom':
+            preferred_vernacular_name = self.get_taxon_source_vernacular_name(language)
 
-    def vernacular(self, language=None, cache=None):
+        if not preferred_vernacular_name and meta_app:
+            primary_locale_vernacular_name = self.get_primary_locale_vernacular_name_from_nature_guides(meta_app)
+            if language == meta_app.primary_language:
+                preferred_vernacular_name = primary_locale_vernacular_name
+            else:
+                localization = self.meta_app.localizations.get(language, {})
+                preferred_vernacular_name = localization.get(primary_locale_vernacular_name, None)
+                
+        if not preferred_vernacular_name:
+            preferred_vernacular_name = self.get_taxon_source_vernacular_name(language)
+            
+        return preferred_vernacular_name
+        
+        
+    def vernacular(self, language=None, cache=None, meta_app=None):
 
         if cache:
-            if self.taxon_source in cache and self.taxon_latname in cache[self.taxon_source]:
+            if self.taxon_source in cache and self.name_uuid in cache[self.taxon_source]:
 
-                cache_entry = cache[self.taxon_source][self.taxon_latname]
+                cache_entry = cache[self.taxon_source][self.name_uuid]
 
                 if language in cache_entry:
                     return cache_entry[language]
@@ -106,59 +166,98 @@ class LazyTaxon(LazyTaxonBase):
             language = translation.get_language()[:2].lower()
 
         # first use the MetaVernacularNames
-        locale = MetaVernacularNames.objects.filter(taxon_latname=self.taxon_latname,
-                    taxon_author=self.taxon_author, language=language, preferred=True).first()
+        preferred_vernacular_name = self.get_preferred_vernacular_name(language, meta_app)
+        
+        if preferred_vernacular_name:
+            return preferred_vernacular_name
 
-
-        if not locale:
-            locale = self.models.TaxonLocaleModel.objects.filter(taxon__taxon_latname=self.taxon_latname,
-                            taxon__taxon_author=self.taxon_author, language=language, preferred=True).first()
-
-        if not locale:
-            locale = self.models.TaxonLocaleModel.objects.filter(taxon__taxon_latname=self.taxon_latname,
-                            taxon__taxon_author=self.taxon_author, language=language).first()
-
-        if not locale and self.origin == 'MetaNode':
+        if self.origin == 'MetaNode':
             return self.instance.name
             
-        if locale:
-            return locale.name            
-
         return None
+    
 
-    def all_vernacular_names(self, only_preferred=True, cache=None, language=None):
+    def _get_vernacular_name_reference(self, name, language, is_preferred_name, instance):
+        
+        origin = instance.__class__.__name__
+        verbose_origin = instance._meta.verbose_name
+        
+        if isinstance(instance, MetaVernacularNames):
+            verbose_origin = _('manually added')
 
-        matches = []
-
-        if not language:
-            found_locales = []
+        
+        vernacular_reference = {
+            'name': name,
+            'language': language,
+            'is_preferred_name': is_preferred_name,
+            'instance': instance,
+            'origin': origin,
+            'verbose_origin': verbose_origin,
+        }
+        
+        return vernacular_reference
+    
+    
+    def all_vernacular_names(self, meta_app, distinct=True, only_preferred=False, languages=[]):
+        
+        names = []
+        used_names = []
+        
+        meta_vernacular_names = MetaVernacularNames.objects.filter(taxon_source=self.taxon_source,
+                                                                   name_uuid=self.name_uuid)
+        
+        if languages:
+            meta_vernacular_names = meta_vernacular_names.filter(language__in=languages)
             
-            locales = MetaVernacularNames.objects.filter(taxon_latname=self.taxon_latname,
-                                                         taxon_author=self.taxon_author)
+        if only_preferred == True:
+            meta_vernacular_names = meta_vernacular_names.filter(preferred=True)
 
-            if only_preferred:
-                locales = locales.filter(preferred=True)
+        
+        for mvn in meta_vernacular_names:
+            
+            if mvn.name in used_names and distinct == True:
+                continue
+            
+            used_names.append(mvn.name)
+            
+            vernacular_name_reference = self._get_vernacular_name_reference(mvn.name, mvn.language,
+                                                                            mvn.preferred, mvn)
+            
+            names.append(vernacular_name_reference)
+            
+            
+        vernacular_meta_nodes = self.get_vernacular_meta_nodes(meta_app)
+        if vernacular_meta_nodes:
+            
+            for meta_node in vernacular_meta_nodes:
+                if meta_node.name not in used_names:
+                    ng_name_reference = self._get_vernacular_name_reference(meta_node.name,
+                                                        meta_app.primary_language, False, meta_node)
+                    names.append(ng_name_reference)
+            
+        
+        taxon_locales = self.models.TaxonLocaleModel.objects.filter(taxon=self.name_uuid)
+        
+        if languages:
+            taxon_locales = taxon_locales.filter(language__in=languages)
+        if only_preferred == True:
+            taxon_locales = taxon_locales.filter(preferred=True)
 
-            for locale in locales:
-                matches.append(locale)
-                found_locales.append(locale.language)
-
-            locales = self.models.TaxonLocaleModel.objects.filter(taxon__taxon_latname=self.taxon_latname,
-                                        taxon__taxon_author=self.taxon_author).exclude(language__in=found_locales)
-
-            #if only_preferred:
-            #    locales = locales.filter(preferred=True)
-
-            for locale in locales:
-                matches.append(locale)
-
-        else:
-            matches = self.models.TaxonLocaleModel.objects.filter(taxon__taxon_latname=self.taxon_latname,
-                                        taxon__taxon_author=self.taxon_author, language=language)
-
-        return matches
-
-    def get_primary_locale_vernacular_name_from_nature_guides(self, meta_app):
+        for taxon_locale in taxon_locales:
+            
+            if taxon_locale.name in used_names and distinct == True:
+                continue
+            
+            used_names.append(taxon_locale.name)
+            vernacular_name_reference = self._get_vernacular_name_reference(taxon_locale.name,
+                                        taxon_locale.language, taxon_locale.preferred, taxon_locale)
+            
+            names.append(vernacular_name_reference)
+            
+        return names
+        
+    def get_vernacular_meta_nodes(self, meta_app):
+        
         from app_kit.features.nature_guides.models import NatureGuide, MetaNode
         installed_taxonomic_sources = [s[0] for s in settings.TAXONOMY_DATABASES]
 
@@ -167,11 +266,21 @@ class LazyTaxon(LazyTaxonBase):
             nature_guide_links = meta_app.get_generic_content_links(NatureGuide)
             nature_guide_ids = nature_guide_links.values_list('object_id', flat=True)
 
-            meta_node = MetaNode.objects.filter(nature_guide_id__in=nature_guide_ids,
-                name_uuid=self.name_uuid).first()
+            meta_nodes = MetaNode.objects.filter(nature_guide_id__in=nature_guide_ids,
+                name_uuid=self.name_uuid)
 
-            if meta_node:
-                return meta_node.name
+            return meta_nodes
+        
+        return []
+            
+
+    def get_primary_locale_vernacular_name_from_nature_guides(self, meta_app):
+        
+        meta_nodes = self.get_vernacular_meta_nodes(meta_app)
+        
+        if meta_nodes:
+            meta_node = meta_nodes.first()
+            return meta_node.name
         
         return None
         

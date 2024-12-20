@@ -3,18 +3,26 @@ from django.utils.translation import gettext as _
 
 from localcosmos_server.taxonomy.forms import AddSingleTaxonForm
 
-from taxonomy.models import TaxonomyModelRouter
+from taxonomy.models import TaxonomyModelRouter, MetaVernacularNames
+from taxonomy.forms import ManageMetaVernacularNameForm
 
 from django.views.generic import TemplateView, FormView
 
-import json
-
-
+from taxonomy.lazy import LazyTaxon
 from .TaxonSearch import TaxonSearch
 
 from django.db.models.functions import Length
 
 from app_kit.models import MetaApp
+from app_kit.view_mixins import MetaAppMixin, MetaAppFormLanguageMixin
+
+from localcosmos_server.decorators import ajax_required
+from django.utils.decorators import method_decorator
+
+
+from localcosmos_server.generic_views import AjaxDeleteView
+
+import json
 
 
 class SearchTaxon(FormView):
@@ -89,3 +97,86 @@ class TaxonTreeView(TemplateView):
         return context
         
 
+class ManageMetaVernacularName(MetaAppFormLanguageMixin, FormView):
+    
+    template_name = 'taxonomy/ajax/manage_meta_vernacular_name.html'
+    form_class = ManageMetaVernacularNameForm
+
+    @method_decorator(ajax_required)
+    def dispatch(self, request, *args, **kwargs):
+        self.set_taxon_and_name(**kwargs)
+        return super().dispatch(request, *args, **kwargs)
+    
+    def set_taxon_and_name(self, **kwargs):
+        self.meta_vernacular_name = None
+        name_id = kwargs.get('meta_vernacular_name_id', None)
+        
+        if name_id:
+            self.meta_vernacular_name = MetaVernacularNames.objects.get(pk=name_id)
+            taxon_source = self.meta_vernacular_name.taxon_source
+            name_uuid = self.meta_vernacular_name.name_uuid
+        else:
+            taxon_source = kwargs['taxon_source']
+            name_uuid = kwargs['name_uuid']
+        
+        models = TaxonomyModelRouter(taxon_source)
+        taxon = models.TaxonTreeModel.objects.get(name_uuid=name_uuid)
+        
+        self.lazy_taxon = LazyTaxon(instance=taxon)
+
+
+    def get_form(self, form_class=None):
+        if form_class is None:
+            form_class = self.get_form_class()
+        return form_class(self.lazy_taxon, self.meta_vernacular_name,
+                          **self.get_form_kwargs())
+    
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['taxon'] = self.lazy_taxon
+        context['meta_vernacular_name'] = self.meta_vernacular_name
+        context['success'] = False
+        return context
+    
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.meta_vernacular_name:
+            initial['name'] = self.meta_vernacular_name.name
+            initial['preferred'] = self.meta_vernacular_name.preferred
+        return initial
+    
+    def form_valid(self, form):
+        
+        if not self.meta_vernacular_name:
+            self.meta_vernacular_name = MetaVernacularNames(
+                taxon_source = self.lazy_taxon.taxon_source,
+                taxon_latname = self.lazy_taxon.taxon_latname,
+                taxon_author = self.lazy_taxon.taxon_author,
+                name_uuid = self.lazy_taxon.name_uuid,
+                taxon_nuid = self.lazy_taxon.taxon_nuid,
+            )
+            
+        self.meta_vernacular_name.language = form.cleaned_data['input_language']
+        self.meta_vernacular_name.name = form.cleaned_data['name']
+        self.meta_vernacular_name.preferred = form.cleaned_data.get('preferred', False)
+        
+        self.meta_vernacular_name.save()
+        
+        context = self.get_context_data(**self.kwargs)
+        context['form'] = form
+        context['success'] = True
+        
+        return self.render_to_response(context)
+    
+
+class DeleteMetaVernacularName(AjaxDeleteView):
+
+    model = MetaVernacularNames
+    template_name = 'taxonomy/ajax/delete_meta_vernacular_name.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['meta_app'] = MetaApp.objects.get(pk=self.kwargs['meta_app_id'])
+        context['taxon'] = self.object
+        return context

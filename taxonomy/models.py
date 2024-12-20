@@ -303,13 +303,32 @@ class MetaVernacularNames(models.Model):
     taxon_latname = models.CharField(max_length=255)
     taxon_author = models.CharField(max_length=255, null=True) 
     taxon_source = models.CharField(max_length=255, choices=settings.TAXONOMY_DATABASES)
-
     taxon_nuid = models.CharField(max_length=255)
     name_uuid = models.UUIDField()
 
     language = models.CharField(max_length=15)
     name = models.CharField(max_length=255)
     preferred = models.BooleanField(default=False)
+    
+    def save(self, *args, **kwargs):
+        
+        if self.preferred == True:
+            
+            old_primaries = self.__class__.objects.filter(
+                taxon_source=self.taxon_source, name_uuid=self.name_uuid,
+                preferred=True)
+            
+            if self.pk:
+                old_primaries.exclude(pk=self.pk)
+                
+            old_primaries.update(preferred=False)
+        
+        super().save(*args, **kwargs)
+       
+        
+    def __str__(self):
+        return self.name
+
 
     class Meta:
         unique_together = ('taxon_source', 'taxon_latname', 'taxon_author', 'language', 'name')
