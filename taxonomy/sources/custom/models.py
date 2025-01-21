@@ -64,5 +64,10 @@ class CustomTaxonLocale(TaxonLocale):
         unique_together = ('taxon', 'language', 'name')
 
 
-class CustomTaxonNamesView(TaxonNamesView):
-    pass
+class CustomTaxonNamesView(TaxonTree):
+    
+    objects = CustomTaxonTreeManager()
+
+    class Meta:
+        managed = False
+        db_table = 'custom_customtaxontree'
