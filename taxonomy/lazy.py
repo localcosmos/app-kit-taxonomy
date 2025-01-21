@@ -203,6 +203,8 @@ class LazyTaxon(LazyTaxonBase):
         names = []
         used_names = []
         
+        preferred_vernacular_name = None
+        
         meta_vernacular_names = MetaVernacularNames.objects.filter(taxon_source=self.taxon_source,
                                                                    name_uuid=self.name_uuid)
         
@@ -218,10 +220,15 @@ class LazyTaxon(LazyTaxonBase):
             if mvn.name in used_names and distinct == True:
                 continue
             
+            is_preferred = False
+            if mvn.preferred and not preferred_vernacular_name:
+                preferred_vernacular_name = mvn.name
+                is_preferred = True
+            
             used_names.append(mvn.name)
             
             vernacular_name_reference = self._get_vernacular_name_reference(mvn.name, mvn.language,
-                                                                            mvn.preferred, mvn)
+                                                                            is_preferred, mvn)
             
             names.append(vernacular_name_reference)
             
@@ -248,9 +255,15 @@ class LazyTaxon(LazyTaxonBase):
             if taxon_locale.name in used_names and distinct == True:
                 continue
             
+            is_preferred = False
+            
+            if taxon_locale.preferred and not preferred_vernacular_name:
+                preferred_vernacular_name = taxon_locale.name
+                is_preferred = True
+            
             used_names.append(taxon_locale.name)
             vernacular_name_reference = self._get_vernacular_name_reference(taxon_locale.name,
-                                        taxon_locale.language, taxon_locale.preferred, taxon_locale)
+                                        taxon_locale.language, is_preferred, taxon_locale)
             
             names.append(vernacular_name_reference)
             
