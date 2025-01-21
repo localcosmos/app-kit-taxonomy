@@ -133,7 +133,7 @@ class LazyTaxon(LazyTaxonBase):
                 meta_vernacular_name = meta_vernacular_names.first()
                 preferred_vernacular_name = meta_vernacular_name.name
         
-        if self.taxon_source == 'taxonomy.sources.custom':
+        if not preferred_vernacular_name and self.taxon_source == 'taxonomy.sources.custom':
             preferred_vernacular_name = self.get_taxon_source_vernacular_name(language)
 
         if not preferred_vernacular_name and meta_app:
