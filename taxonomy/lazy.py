@@ -300,6 +300,23 @@ class LazyTaxon(LazyTaxonBase):
 
     def descendants(self):
         return self.models.TaxonTreeModel.objects.filter(taxon_nuid__startswith=self.taxon_nuid)
+    
+    
+    def get_taxonomic_branch(self):
+        
+        branch = []
+        tree_instance = self.tree_instance()
+        
+        if tree_instance:
+            
+            parent = tree_instance.parent
+            
+            while parent:
+                branch.append(parent)
+                parent = parent.parent
+        
+        branch.reverse()
+        return branch
 
 
 from localcosmos_server.taxonomy.lazy import LazyTaxonListBase

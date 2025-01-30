@@ -31,8 +31,8 @@ class ColTaxonLocale(TaxonLocale):
     taxon = models.ForeignKey(ColTaxonTree, on_delete=models.CASCADE, to_field='name_uuid')
 
     class Meta:
-        index_together = [
-            ['taxon', 'language'],
+        indexes = [
+            models.Index(fields=['taxon', 'language']),
         ]
         
         verbose_name = _('Catalogue of Life')

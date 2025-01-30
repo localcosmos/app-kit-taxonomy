@@ -18,8 +18,8 @@ class AlgaebaseTaxonLocale(TaxonLocale):
     taxon = models.ForeignKey(AlgaebaseTaxonTree, on_delete=models.CASCADE, to_field='name_uuid')
 
     class Meta:
-        index_together = [
-            ['taxon', 'language'],
+        indexes = [
+            models.Index(fields=['taxon', 'language']),
         ]
     
 

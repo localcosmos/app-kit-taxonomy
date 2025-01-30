@@ -333,6 +333,6 @@ class MetaVernacularNames(models.Model):
     class Meta:
         unique_together = ('taxon_source', 'taxon_latname', 'taxon_author', 'language', 'name')
 
-        index_together = [
-            ['taxon_source', 'taxon_latname', 'taxon_author'],
+        indexes = [
+            models.Index(fields=['taxon_source', 'taxon_latname', 'taxon_author']),
         ]
