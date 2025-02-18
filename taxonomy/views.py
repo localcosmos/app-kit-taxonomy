@@ -11,6 +11,8 @@ from django.views.generic import TemplateView, FormView
 from taxonomy.lazy import LazyTaxon
 from .TaxonSearch import TaxonSearch
 
+from .utils import get_lazy_taxon_from_name_uuid
+
 from django.db.models.functions import Length
 
 from app_kit.models import MetaApp
@@ -119,10 +121,7 @@ class ManageMetaVernacularName(MetaAppFormLanguageMixin, FormView):
             taxon_source = kwargs['taxon_source']
             name_uuid = kwargs['name_uuid']
         
-        models = TaxonomyModelRouter(taxon_source)
-        taxon = models.TaxonTreeModel.objects.get(name_uuid=name_uuid)
-        
-        self.lazy_taxon = LazyTaxon(instance=taxon)
+        self.lazy_taxon = get_lazy_taxon_from_name_uuid(taxon_source, name_uuid)
 
 
     def get_form(self, form_class=None):

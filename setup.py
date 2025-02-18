@@ -9,7 +9,7 @@ install_requires = [
 
 setup(
     name='localcosmos_app_kit_taxonomy',
-    version='0.2.0',
+    version='0.2.1',
     description='Local Cosmos Taxonomy django app',
     long_description=long_description,
     long_description_content_type="text/markdown",

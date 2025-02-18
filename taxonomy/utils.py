@@ -1,4 +1,6 @@
 import math
+from taxonomy.models import TaxonomyModelRouter
+from taxonomy.lazy import LazyTaxon
 
 class NuidManager:
     
@@ -71,3 +73,19 @@ class NuidManager:
         new_nuid_tail = self.decimal_to_nuid(decimal + 1)
 
         return '%s%s' % (nuid_head, new_nuid_tail)
+
+
+
+def get_lazy_taxon_from_name_uuid(taxon_source, name_uuid):
+    
+    models = TaxonomyModelRouter(taxon_source)
+        
+    if taxon_source == 'taxonomy.source.custom':
+        taxon = models.TaxonTreeModel.objects.get(name_uuid=name_uuid)
+    else:
+        taxon = models.TaxonNamesModel.objects.get(name_uuid=name_uuid)
+        
+    lazy_taxon = LazyTaxon(instance=taxon)
+        
+    return lazy_taxon
+    
