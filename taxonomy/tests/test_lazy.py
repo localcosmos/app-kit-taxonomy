@@ -171,3 +171,65 @@ class TestLazyTaxon(TenantTestCase):
 
     def test_descendants(self):
         pass
+    
+    def test_check_with_reference(self):
+        
+        taxon_kwargs = NATRIX_NATRIX
+        lazy_taxon = LazyTaxon(**taxon_kwargs)
+        
+        errors = lazy_taxon.check_with_reference()
+        
+        self.assertEqual(errors, [])
+        
+        wrong_source_kwargs = taxon_kwargs.copy()
+        wrong_source_kwargs.update({
+            'taxon_source': 'wrong_source',
+        })
+        
+        wrong_source_lazy_taxon = LazyTaxon(**wrong_source_kwargs)
+        errors = wrong_source_lazy_taxon.check_with_reference()
+        self.assertEqual(errors, ['Taxon source wrong_source is not installed'])
+        
+        wrong_latname = taxon_kwargs.copy()
+        wrong_latname.update({
+            'taxon_latname': 'wrong_latname',
+        })
+        wrong_latname_lazy_taxon = LazyTaxon(**wrong_latname)
+        errors = wrong_latname_lazy_taxon.check_with_reference()
+        self.assertEqual(errors, ['Taxon wrong_latname (Linnaeus, 1758) not found in Catalogue Of Life 2019'])
+        
+        wrong_nuid = taxon_kwargs.copy()
+        wrong_nuid.update({
+            'taxon_nuid': 'wrong_nuid',
+        })
+        wrong_nuid_lazy_taxon = LazyTaxon(**wrong_nuid)
+        errors = wrong_nuid_lazy_taxon.check_with_reference()
+        self.assertEqual(errors, ['Taxon Natrix natrix (Linnaeus, 1758) has changed its position in Catalogue Of Life 2019'])
+        
+        wrong_name_uuid = taxon_kwargs.copy()
+        wrong_name_uuid.update({
+            'name_uuid': 'wrong_name_uuid',
+        })
+        wrong_name_uuid_lazy_taxon = LazyTaxon(**wrong_name_uuid)
+        errors = wrong_name_uuid_lazy_taxon.check_with_reference()
+        self.assertEqual(errors, ['Taxon Natrix natrix (Linnaeus, 1758) has changed its identifier in Catalogue Of Life 2019'])
+        
+        
+    def test_check_with_reference_synonym(self):
+        
+        taxon_kwargs = {
+            'taxon_source': 'taxonomy.sources.col',
+            'taxon_latname': 'Pinus iztacihuatlii',
+            'taxon_author': 'Roezl',
+            'taxon_nuid': '006008007001005008014',
+            'name_uuid': '543fb4fa-347b-445f-bc54-3815281ec674',
+        }
+        
+        lazy_taxon = LazyTaxon(**taxon_kwargs)
+        errors = lazy_taxon.check_with_reference()
+        
+        expected_errors = [
+            'Taxon Pinus iztacihuatlii Roezl not found as accepted name, but as synonym of Pinus hartwegii Lindl.'
+        ]
+        
+        self.assertEqual(errors, expected_errors)

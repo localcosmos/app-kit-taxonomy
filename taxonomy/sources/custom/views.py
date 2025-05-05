@@ -203,7 +203,7 @@ class ManageCustomTaxonChildren(ManageCustomTaxonTree):
     moving is currently disabled because of nuid problems when moving a taxon
     moving a taxon would require updating all nuids of all descendant taxa across all ModelWithTaxon subclasses
 '''
-from taxonomy.signals import get_subclasses
+from taxonomy.utils import get_subclasses
 from localcosmos_server.taxonomy.generic import ModelWithRequiredTaxon, ModelWithTaxon
 
 

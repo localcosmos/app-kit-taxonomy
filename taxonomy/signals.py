@@ -4,23 +4,7 @@ from taxonomy.sources.custom.models import CustomTaxonTree
 
 from localcosmos_server.taxonomy.generic import ModelWithRequiredTaxon, ModelWithTaxon
 
-def get_subclasses(cls):
-    result = []
-    classes_to_inspect = [cls]
-    
-    while classes_to_inspect:
-        class_to_inspect = classes_to_inspect.pop()
-        
-        for subclass in class_to_inspect.__subclasses__():
-
-            if subclass._meta.abstract == True:
-                classes_to_inspect.append(subclass)
-                
-            elif subclass not in result:
-                result.append(subclass)
-                classes_to_inspect.append(subclass)
-                
-    return result
+from taxonomy.utils import get_subclasses
 
 
 """

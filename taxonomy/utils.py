@@ -88,4 +88,22 @@ def get_lazy_taxon_from_name_uuid(taxon_source, name_uuid):
     lazy_taxon = LazyTaxon(instance=taxon)
         
     return lazy_taxon
+
+
+def get_subclasses(cls):
+    result = []
+    classes_to_inspect = [cls]
     
+    while classes_to_inspect:
+        class_to_inspect = classes_to_inspect.pop()
+        
+        for subclass in class_to_inspect.__subclasses__():
+
+            if subclass._meta.abstract == True:
+                classes_to_inspect.append(subclass)
+                
+            elif subclass not in result:
+                result.append(subclass)
+                classes_to_inspect.append(subclass)
+                
+    return result
