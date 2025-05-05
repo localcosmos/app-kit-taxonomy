@@ -5,7 +5,9 @@ from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 from django.db.models import Q
 
-TAXON_SOURCES = {}
+TAXON_SOURCES = {
+    'app_kit.features.nature_guides': _('Nature Guide'),
+}
 
 for source in settings.TAXONOMY_DATABASES:
     if source[0] not in TAXON_SOURCES:
